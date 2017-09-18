@@ -58,6 +58,15 @@ class Points_api {
 	protected $version;
 
 	/**
+	 * Plugin's settings.
+	 *
+	 * @since    1.0.0
+	 * @access   private
+	 * @var      array    $settings    Plugin's settings.
+	 */
+	private $settings;
+
+	/**
 	 * Define the core functionality of the plugin.
 	 *
 	 * Set the plugin name and the plugin version that can be used throughout the plugin.
@@ -73,7 +82,7 @@ class Points_api {
 			$this->version = '1.0.0';
 		}
 		$this->plugin_name = 'points_api';
-
+		$this->settings = get_option( 'points_api_settings' );
 		$this->load_dependencies();
 		$this->set_locale();
 		$this->define_admin_hooks();
@@ -213,6 +222,18 @@ class Points_api {
 	 */
 	public function get_version() {
 		return $this->version;
+	}
+
+
+	/**
+	 * Retrieve Plugin setting option/options.
+	 *
+	 * @since     1.0.0
+	 * @param     string|bool    $option    Requested setting name.
+	 * @return    string|array              Requested setting option/options value/values.
+	 */
+	public function get_settings_option($option = false) {
+		return $option ? ( isset( $this->settings[$option] ) ? $this->settings[$option] : false ) : $this->settings;
 	}
 
 }

@@ -32,6 +32,11 @@ if ( ! defined( 'WPINC' ) ) {
 
 define( 'PLUGIN_VERSION', '1.0.0' );
 
+$points_api = FALSE;
+
+require plugin_dir_path( __FILE__ ) . 'custom/class-settings-page.php';
+require plugin_dir_path( __FILE__ ) . 'custom/class-user-hooks.php';
+
 /**
  * The code that runs during plugin activation.
  * This action is documented in includes/class-points_api-activator.php
@@ -69,14 +74,15 @@ require plugin_dir_path( __FILE__ ) . 'includes/class-points_api.php';
  * @since    1.0.0
  */
 function run_points_api() {
+	global $points_api;
 
-	$plugin = new Points_api();
-	$plugin->run();
-
+	$points_api = new Points_api();
+	if ( $points_api->get_settings_option('points_api_enabled') ) {
+		$points_api->get_loader()->add_action('register_form', UserHooks::class, 'callback_register_form' );
+		$points_api->get_loader()->add_action('user_register', UserHooks::class, 'callback_user_register' );
+		$points_api->get_loader()->add_filter('registration_errors', UserHooks::class, 'callback_registration_errors', 20, 3 );
+		$points_api->get_loader()->add_filter('wp_authenticate_user', UserHooks::class, 'callback_authenticate_user', 10, 2 );
+	}
+	$points_api->run();
 }
 run_points_api();
-
-require plugin_dir_path( __FILE__ ) . 'custom/class-settings-page.php';
-require plugin_dir_path( __FILE__ ) . 'custom/user-hooks.php';
-
-
