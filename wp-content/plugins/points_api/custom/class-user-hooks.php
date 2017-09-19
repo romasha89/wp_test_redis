@@ -45,17 +45,17 @@ class UserHooks {
 		if ( empty( $_POST['last_name'] ) || ! empty( $_POST['last_name'] ) && trim( $_POST['last_name'] ) == '' ) {
 			$errors->add( 'last_name_error', __( '<strong>ERROR</strong>: You must include a last name.', 'points_api' ) );
 		}
-		if ( empty( $errors->get_error_code() ) ) {
+		if ( ! $errors->get_error_code() ) {
 
 			$data = array( 'email' => $_POST['user_email'] );
 			$data_json = json_encode( $data );
 
-			$response = self::sendRequest( $points_api->get_settings_option('login_url'), 'POST', [
-				'headers' => [
+			$response = self::sendRequest( $points_api->get_settings_option('login_url'), 'POST', array(
+				'headers' => array(
 					'Content-Type' => 'application/json',
-				],
+				),
 				'body' => $data_json,
-			] );
+			) );
 			if ( self::getResponseCode( $response ) === 200 ) {
 				$errors->add( 'user_email_error', __( '<strong>ERROR</strong>: Email already taken! Please, use another one.', 'points_api' ) );
 			}
@@ -68,20 +68,20 @@ class UserHooks {
 		global $points_api;
 
 		if ( isset( $_POST['user_email'] ) ) {
-			$data_json = json_encode( [
+			$data_json = json_encode( array(
 				'id' => $user_id,
 				'email' => $_POST['user_email'],
 				'userName' => $_POST['user_login'],
 				'firstName' => $_POST['first_name'],
 				'lastName' => $_POST['last_name'],
-			] );
+			) );
 
-			$response = self::sendRequest( $points_api->get_settings_option('signup_url'), 'POST', [
-				'headers' => [
+			$response = self::sendRequest( $points_api->get_settings_option( 'signup_url' ), 'POST', array(
+				'headers' => array(
 					'Content-Type' => 'application/json',
-				],
+				),
 				'body' => $data_json,
-			] );
+			) );
 			if ( self::getResponseCode( $response ) == 201 ) {
 				$response_body = json_decode( self::getResponseBody( $response ) );
 				update_user_meta( $user_id, 'uid', $response_body->id );
@@ -92,31 +92,39 @@ class UserHooks {
 	public static function callback_authenticate_user( $user, $user_password ) {
 		global $points_api;
 
-		if ( ! empty( $user ) && ! empty( $user_password ) && self::isApiActiveFor( $user ) ) {
-			if ( $user && wp_check_password( $user_password, $user->data->user_pass, $user->ID ) ) {
-				$uid = get_user_meta( $user->ID, 'uid', true ) ?: $user->ID;
+		if ( ! empty( $user ) && self::isApiActiveFor( $user ) ) {
+			$errors = new WP_Error();
+			if ( ! empty( $user_password ) ) {
+				if ( $user && wp_check_password( $user_password, $user->data->user_pass, $user->ID ) ) {
+					$uid = get_user_meta( $user->ID, 'uid', true ) ?: $user->ID;
+					$url = trim($points_api->get_settings_option('fetch_user_data_url'), '/');
+					$response = self::sendRequest( "{$url}/{$uid}", 'GET' );
+					if ( is_wp_error( $response ) ) {
 
-				$url = trim($points_api->get_settings_option('fetch_user_data_url'), '/');
+						return $response;
+					} else if ( self::getResponseCode( $response ) == 200 ) {
+						$response_body = json_decode( self::getResponseBody( $response ) );
+						if( ( ! empty ( $response_body->id ) && $response_body->id == $user->ID ) ) {
 
-				$response = self::sendRequest( "{$url}/{$uid}", 'GET' );
+							// Return User object to allow authentication.
+							return $user;
+						} else {
+							// Create an error to return to user.
+							$errors->add( 'title_error', __( "<strong>ERROR</strong>: User does not exists!", 'points_api' ) );
 
-				if ( is_wp_error( $response ) ) {
-					return $response;
-				}
-				else if ( self::getResponseCode( $response ) == 200 ) {
-					$response_body = json_decode( self::getResponseBody( $response ) );
-					if( ! $user || empty( $response_body ) || ( ! empty ( $response_body->id ) && $response_body->id !== $user->ID ) ) {
-						// Create an error to return to user.
-						$errors = new WP_Error();
-						$errors->add( 'title_error', __( "<strong>ERROR</strong>: User does not exists!", 'points_api' ) );
-
-						return $errors;
+							return $errors;
+						}
 					}
+				} else {
+					return $user;
 				}
 			}
-		}
 
-		return $user;
+			$errors->add( 'api_error', __( "<strong>ERROR</strong>: Authentication failed!", 'points_api' ) );
+			return $errors;
+		} else {
+			return $user;
+		}
 	}
 
 	/**
@@ -133,7 +141,7 @@ class UserHooks {
 			return new WP_Error( 'api_error', __( "<strong>ERROR</strong>: Gerenal failure! Please, contact support.", 'points_api' ) );
 		}
 
-		return wp_remote_request( $url, array_merge( ['method' => $method, 'timeout' => self::getTimeout()], $args ) );
+		return wp_remote_request( $url, array_merge( array( 'method' => $method, 'timeout' => self::getTimeout() ), $args ) );
 	}
 
 	/**
@@ -178,10 +186,18 @@ class UserHooks {
 	 */
 	private static function isApiActiveFor( $user = false ) {
 		if ( ! $user ) $user = _wp_get_current_user();
-		$disallowed_roles = ['editor', 'administrator', 'author'];
+		$disallowed_roles = array( 'editor', 'administrator', 'author' );
 
 		return ! array_intersect( $disallowed_roles, $user->roles );
 
 	}
 
+	/**
+	 * Get ClassName.
+	 *
+	 * @return object
+	 */
+	public static function getClass() {
+		return get_class();
+	}
 }
