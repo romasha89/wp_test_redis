@@ -1,8 +1,26 @@
 <?php
 
+/**
+ * Define custom User Hooks Class.
+ *
+ * @link       http://author.com
+ * @since      1.0.0
+ *
+ * @package    Points_api
+ * @subpackage Points_api/includes
+ */
+
+/**
+ * Define custom User Hooks Class.
+ *
+ * @since      1.0.0
+ * @package    Points_api
+ * @subpackage Points_api/includes
+ * @author     Points API <points_api@example.com>
+ */
 class UserHooks {
 
-	public function callback_register_form() {
+	public static function callback_register_form() {
 		$first_name = ( ! empty( $_POST['first_name'] ) ) ? trim( $_POST['first_name'] ) : '';
 		$last_name = ( ! empty( $_POST['last_name'] ) ) ? trim( $_POST['last_name'] ) : ''; ?>
 		<p>
@@ -18,7 +36,7 @@ class UserHooks {
 		<?php
 	}
 
-	public function callback_registration_errors( $errors, $sanitized_user_login, $user_email ) {
+	public static function callback_registration_errors( $errors, $sanitized_user_login, $user_email ) {
 		global $points_api;
 
 		if ( empty( $_POST['first_name'] ) || ! empty( $_POST['first_name'] ) && trim( $_POST['first_name'] ) == '' ) {
@@ -49,7 +67,7 @@ class UserHooks {
 		return $errors;
 	}
 
-	public function callback_user_register( $user_id ) {
+	public static function callback_user_register( $user_id ) {
 		global $points_api;
 
 		if ( isset( $_POST['user_email'] ) ) {
@@ -77,34 +95,99 @@ class UserHooks {
 		}
 	}
 
-	public function callback_authenticate_user( $user, $user_password ) {
+	public static function callback_authenticate_user( $user, $user_password ) {
 		global $points_api;
 
-		if ( ! empty( $user ) && ! empty( $user_password )  ) {
+		if ( ! empty( $user ) && ! empty( $user_password ) && self::isApiActiveFor( $user ) ) {
 			if ( $user && wp_check_password( $user_password, $user->data->user_pass, $user->ID ) ) {
 				$uid = get_user_meta( $user->ID, 'uid', true ) ?: $user->ID;
 
 				$url = trim($points_api->get_settings_option('fetch_user_data_url'), '/');
-				$response = wp_remote_request("{$url}/{$uid}", [
-					'method' => 'GET',
-					'timeout' => 2,
-				]);
 
-				if ( wp_remote_retrieve_response_code( $response ) == 200 ) {
-					$response_body = json_decode( wp_remote_retrieve_body( $response ) );
+				$response = self::sendRequest( "{$url}/{$uid}", 'GET' );
+
+				if ( is_wp_error( $response ) ) {
+					return $response;
 				}
+				else if ( self::getResponseCode( $response ) == 200 ) {
+					$response_body = json_decode( self::getResponseBody( $response ) );
+					if( ! $user || empty( $response_body ) || ( ! empty ( $response_body->id ) && $response_body->id !== $user->ID ) ) {
+						// Create an error to return to user.
+						$errors = new WP_Error();
+						$errors->add( 'title_error', __( "<strong>ERROR</strong>: User does not exists!", 'points_api' ) );
 
-				if( ! $user || empty( $response_body ) || ( ! empty ( $response_body->id ) && $response_body->id !== $user->ID ) ) {
-					// Create an error to return to user.
-					$errors = new WP_Error();
-					$errors->add('title_error', __("<strong>ERROR</strong>: User does not exists!", 'points_api'));
-
-					return $errors;
+						return $errors;
+					}
 				}
 			}
 		}
 
 		return $user;
+	}
+
+	/**
+	 * Send HTTP Request.
+	 *
+	 * @param    string              $url            Request URL string.
+	 * @param    string              $method         Request method [GET, POST, etc.].
+	 * @param    array               $args           Extra arguments array.
+	 *
+	 * @return array|WP_Error
+	 */
+	private static function sendRequest( $url, $method, $args = [] ) {
+		if ( filter_var( $url, FILTER_VALIDATE_URL ) === false ) {
+			return new WP_Error( 'api_error', __( "<strong>ERROR</strong>: Gerenal failure! Please, contact support.", 'points_api' ) );
+		}
+
+		return wp_remote_request( $url, array_merge( ['method' => $method, 'timeout' => self::getTimeout()], $args ) );
+	}
+
+	/**
+	 * Get response Code.
+	 *
+	 * @param $response
+	 *
+	 * @return int|string
+	 */
+	public static function getResponseCode( $response ) {
+		return wp_remote_retrieve_response_code( $response );
+	}
+
+	/**
+	 * Get response Body.
+	 *
+	 * @param $response
+	 *
+	 * @return string
+	 */
+	public static function getResponseBody( $response ) {
+		return wp_remote_retrieve_body( $response );
+	}
+
+	/**
+	 * Get API Timeout from settings.
+	 *
+	 * @return int
+	 */
+	private static function getTimeout() {
+		global $points_api;
+
+		return $points_api->get_settings_option('api_timeout') ?: 5;
+	}
+
+	/**
+	 * Validate, if current user should be verified using API.
+	 *
+	 * @param WP_User|bool $user
+	 *
+	 * @return bool
+	 */
+	private static function isApiActiveFor( $user = false ) {
+		if ( ! $user ) $user = _wp_get_current_user();
+		$disallowed_roles = ['editor', 'administrator', 'author'];
+
+		return ! array_intersect( $disallowed_roles, $user->roles );
+
 	}
 
 }

@@ -51,6 +51,33 @@ class Points_api_Admin {
 
 		$this->plugin_name = $plugin_name;
 		$this->version = $version;
+		$this->load_dependencies();
+
+	}
+
+
+	/**
+	 * Load the required dependencies for this plugin.
+	 *
+	 * Include the following files that make up the plugin:
+	 *
+	 * - Points_api_Loader. Orchestrates the hooks of the plugin.
+	 * - Points_api_i18n. Defines internationalization functionality.
+	 * - Points_api_Admin. Defines all hooks for the admin area.
+	 * - Points_api_Public. Defines all hooks for the public side of the site.
+	 *
+	 * Create an instance of the loader which will be used to register the hooks
+	 * with WordPress.
+	 *
+	 * @since    1.0.0
+	 * @access   private
+	 */
+	private function load_dependencies() {
+
+		/**
+		 * The class responsible for Plugin admin pages.
+		 */
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'admin/partials/points_api-admin-display.php';
 
 	}
 
