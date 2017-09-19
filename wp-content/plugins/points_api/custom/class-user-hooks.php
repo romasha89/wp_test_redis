@@ -50,16 +50,13 @@ class UserHooks {
 			$data = array( 'email' => $_POST['user_email'] );
 			$data_json = json_encode( $data );
 
-			$response = wp_remote_request($points_api->get_settings_option('login_url'), [
-				'method' => 'POST',
+			$response = self::sendRequest( $points_api->get_settings_option('login_url'), 'POST', [
 				'headers' => [
 					'Content-Type' => 'application/json',
 				],
-				'timeout' => 2,
 				'body' => $data_json,
-			]);
-
-			if ( wp_remote_retrieve_response_code( $response ) === 200 ) {
+			] );
+			if ( self::getResponseCode( $response ) === 200 ) {
 				$errors->add( 'user_email_error', __( '<strong>ERROR</strong>: Email already taken! Please, use another one.', 'points_api' ) );
 			}
 		}
@@ -79,17 +76,14 @@ class UserHooks {
 				'lastName' => $_POST['last_name'],
 			] );
 
-			$response = wp_remote_request($points_api->get_settings_option('signup_url'), [
-				'method' => 'POST',
+			$response = self::sendRequest( $points_api->get_settings_option('signup_url'), 'POST', [
 				'headers' => [
 					'Content-Type' => 'application/json',
 				],
-				'timeout' => 2,
 				'body' => $data_json,
-			]);
-
-			if ( wp_remote_retrieve_response_code( $response ) == 201 ) {
-				$response_body = json_decode( wp_remote_retrieve_body( $response ) );
+			] );
+			if ( self::getResponseCode( $response ) == 201 ) {
+				$response_body = json_decode( self::getResponseBody( $response ) );
 				update_user_meta( $user_id, 'uid', $response_body->id );
 			}
 		}
