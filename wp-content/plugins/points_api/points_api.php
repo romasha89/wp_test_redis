@@ -32,7 +32,7 @@ if ( ! defined( 'WPINC' ) ) {
 
 define( 'PLUGIN_VERSION', '1.0.0' );
 
-$points_api = FALSE;
+$points_api = false;
 
 require plugin_dir_path( __FILE__ ) . 'custom/class-user-hooks.php';
 
@@ -78,10 +78,10 @@ function run_points_api() {
 	$points_api = new Points_api();
 
 	if ( $points_api->get_settings_option( 'points_api_enabled' ) ) {
-		$points_api->get_loader()->add_action( 'register_form', UserHooks::getClass(), 'callback_register_form' );
-		$points_api->get_loader()->add_action( 'user_register', UserHooks::getClass(), 'callback_user_register' );
-		$points_api->get_loader()->add_filter( 'registration_errors', UserHooks::getClass(), 'callback_registration_errors', 10, 3 );
-		$points_api->get_loader()->add_filter( 'wp_authenticate_user', UserHooks::getClass(), 'callback_authenticate_user', 10, 2 );
+		$points_api->get_loader()->add_action( 'register_form', UserHooks::get_class(), 'callback_register_form' );
+		$points_api->get_loader()->add_action( 'user_register', UserHooks::get_class(), 'callback_user_register' );
+		$points_api->get_loader()->add_filter( 'registration_errors', UserHooks::get_class(), 'callback_registration_errors', 10, 3 );
+		$points_api->get_loader()->add_filter( 'wp_authenticate', UserHooks::get_class(), 'callback_authenticate', 10, 2 );
 	}
 
 	$points_api->run();
