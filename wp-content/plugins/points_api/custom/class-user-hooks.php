@@ -20,6 +20,9 @@
  */
 class UserHooks {
 
+	/**
+	 * Callback fucntion for 'register_form' hook.
+	 */
 	public static function callback_register_form() {
 		$first_name = ( ! empty( $_POST['first_name'] ) ) ? trim( $_POST['first_name'] ) : '';
 		$last_name = ( ! empty( $_POST['last_name'] ) ) ? trim( $_POST['last_name'] ) : ''; ?>
@@ -36,6 +39,15 @@ class UserHooks {
 		<?php
 	}
 
+	/**
+	 * Callback fucntion for 'registration_errors' hook.
+	 *
+	 * @param WP_Error|false $errors                    WP_Error object or false.
+	 * @param string         $sanitized_user_login      Sanitized user_login.
+	 * @param string         $user_email                User email.
+	 *
+	 * @return mixed
+	 */
 	public static function callback_registration_errors( $errors, $sanitized_user_login, $user_email ) {
 		global $points_api;
 
@@ -47,16 +59,16 @@ class UserHooks {
 		}
 		if ( ! $errors->get_error_code() ) {
 
-			$data = array( 'email' => $_POST['user_email'] );
-			$data_json = json_encode( $data );
+			$data = array( 'email' => $user_email );
+			$data_json = wp_json_encode( $data );
 
-			$response = self::sendRequest( $points_api->get_settings_option('login_url'), 'POST', array(
+			$response = self::send_request( $points_api->get_settings_option( 'login_url' ), 'POST', array(
 				'headers' => array(
 					'Content-Type' => 'application/json',
 				),
 				'body' => $data_json,
 			) );
-			if ( self::getResponseCode( $response ) === 200 ) {
+			if ( self::get_response_code( $response ) === 200 ) {
 				$errors->add( 'user_email_error', __( '<strong>ERROR</strong>: Email already taken! Please, use another one.', 'points_api' ) );
 			}
 		}
@@ -64,11 +76,16 @@ class UserHooks {
 		return $errors;
 	}
 
+	/**
+	 * Callback fucntion for 'user_register' hook.
+	 *
+	 * @param int $user_id  UserID.
+	 */
 	public static function callback_user_register( $user_id ) {
 		global $points_api;
 
 		if ( isset( $_POST['user_email'] ) ) {
-			$data_json = json_encode( array(
+			$data_json = wp_json_encode( array(
 				'id' => $user_id,
 				'email' => $_POST['user_email'],
 				'userName' => $_POST['user_login'],
@@ -76,53 +93,63 @@ class UserHooks {
 				'lastName' => $_POST['last_name'],
 			) );
 
-			$response = self::sendRequest( $points_api->get_settings_option( 'signup_url' ), 'POST', array(
+			$response = self::send_request( $points_api->get_settings_option( 'signup_url' ), 'POST', array(
 				'headers' => array(
 					'Content-Type' => 'application/json',
 				),
 				'body' => $data_json,
 			) );
-			if ( self::getResponseCode( $response ) == 201 ) {
-				$response_body = json_decode( self::getResponseBody( $response ) );
+			if ( self::get_response_code( $response ) === 201 ) {
+				$response_body = json_decode( self::get_response_body( $response ) );
 				update_user_meta( $user_id, 'uid', $response_body->id );
 			}
 		}
 	}
 
-	public static function callback_authenticate_user( $user, $user_password ) {
+	/**
+	 * Callback fucntion for 'wp_authenticate' hook.
+	 *
+	 * @param string $username  Username.
+	 * @param string $password  Password.
+	 *
+	 * @return false|WP_Error|WP_User
+	 */
+	public static function callback_authenticate( $username, $password ) {
 		global $points_api;
 
-		if ( ! empty( $user ) && self::isApiActiveFor( $user ) ) {
+		$username = sanitize_user( $username );
+		$password = trim( $password );
+
+		if ( ! ($username && $password ) ) {
+			return false;
+		}
+
+		$user = get_user_by( is_email( $username ) ? 'email' : 'login', $username );
+		if ( is_wp_error( $user ) ) {
+			return $user;
+		}
+		$user_email = $user->user_email ?: false;
+		if ( ! empty( $user_email ) && self::is_api_active_for( $user ) ) {
 			$errors = new WP_Error();
-			if ( ! empty( $user_password ) ) {
-				if ( $user && wp_check_password( $user_password, $user->data->user_pass, $user->ID ) ) {
-					$uid = get_user_meta( $user->ID, 'uid', true ) ?: $user->ID;
-					$url = trim($points_api->get_settings_option('fetch_user_data_url'), '/');
-					$response = self::sendRequest( "{$url}/{$uid}", 'GET' );
-					if ( is_wp_error( $response ) ) {
-
-						return $response;
-					} else if ( self::getResponseCode( $response ) == 200 ) {
-						$response_body = json_decode( self::getResponseBody( $response ) );
-						if( ( ! empty ( $response_body->id ) && $response_body->id == $user->ID ) ) {
-
-							// Return User object to allow authentication.
-							return $user;
-						} else {
-							// Create an error to return to user.
-							$errors->add( 'title_error', __( "<strong>ERROR</strong>: User does not exists!", 'points_api' ) );
-
-							return $errors;
-						}
+			if ( $user && wp_check_password( $password, $user->data->user_pass, $user->ID ) ) {
+				$uid = get_user_meta( $user->ID, 'uid', true ) ?: $user->ID;
+				$url = trim( $points_api->get_settings_option( 'fetch_user_data_url' ), '/' );
+				$response = self::send_request( "{$url}/{$uid}", 'GET' );
+				if ( is_wp_error( $response ) ) {
+					return $response;
+				} elseif ( self::get_response_code( $response ) === 200 ) {
+					$response_body = json_decode( self::get_response_body( $response ) );
+					if ( ( ! empty( $response_body->id ) && $response_body->id === $user->ID ) ) {
+						// Return User object to allow authentication.
+						return $user;
 					}
-				} else {
-					return $user;
 				}
 			}
-
-			$errors->add( 'api_error', __( "<strong>ERROR</strong>: Authentication failed!", 'points_api' ) );
+			// Create an error to return to user.
+			$errors->add( 'api_error', __( '<strong>ERROR</strong>: Authentication failed!', 'points_api' ) );
 			return $errors;
 		} else {
+			// Return User object to allow admins, editors and authors authentication.
 			return $user;
 		}
 	}
@@ -130,39 +157,39 @@ class UserHooks {
 	/**
 	 * Send HTTP Request.
 	 *
-	 * @param    string              $url            Request URL string.
-	 * @param    string              $method         Request method [GET, POST, etc.].
-	 * @param    array               $args           Extra arguments array.
+	 * @param    string $url            Request URL string.
+	 * @param    string $method         Request method [GET, POST, etc.].
+	 * @param    array  $args           Extra arguments array.
 	 *
 	 * @return array|WP_Error
 	 */
-	private static function sendRequest( $url, $method, $args = [] ) {
+	private static function send_request( $url, $method, $args = array() ) {
 		if ( filter_var( $url, FILTER_VALIDATE_URL ) === false ) {
-			return new WP_Error( 'api_error', __( "<strong>ERROR</strong>: Gerenal failure! Please, contact support.", 'points_api' ) );
+			return new WP_Error( 'api_error', __( '<strong>ERROR</strong>: Gerenal failure! Please, contact support.', 'points_api' ) );
 		}
 
-		return wp_remote_request( $url, array_merge( array( 'method' => $method, 'timeout' => self::getTimeout() ), $args ) );
+		return wp_remote_request( $url, array_merge( array( 'method' => $method, 'timeout' => self::get_timeout() ), $args ) );
 	}
 
 	/**
 	 * Get response Code.
 	 *
-	 * @param $response
+	 * @param array $response   Returns Response Code.
 	 *
 	 * @return int|string
 	 */
-	public static function getResponseCode( $response ) {
+	public static function get_response_code( $response ) {
 		return wp_remote_retrieve_response_code( $response );
 	}
 
 	/**
 	 * Get response Body.
 	 *
-	 * @param $response
+	 * @param array $response   Returns Response Body data.
 	 *
 	 * @return string
 	 */
-	public static function getResponseBody( $response ) {
+	public static function get_response_body( $response ) {
 		return wp_remote_retrieve_body( $response );
 	}
 
@@ -171,21 +198,23 @@ class UserHooks {
 	 *
 	 * @return int
 	 */
-	private static function getTimeout() {
+	private static function get_timeout() {
 		global $points_api;
 
-		return $points_api->get_settings_option('api_timeout') ?: 5;
+		return $points_api->get_settings_option( 'api_timeout' ) ?: 5;
 	}
 
 	/**
 	 * Validate, if current user should be verified using API.
 	 *
-	 * @param WP_User|bool $user
+	 * @param WP_User|bool $user    User Object or false.
 	 *
 	 * @return bool
 	 */
-	private static function isApiActiveFor( $user = false ) {
-		if ( ! $user ) $user = _wp_get_current_user();
+	private static function is_api_active_for( $user = false ) {
+		if ( ! $user ) {
+			$user = _wp_get_current_user();
+		}
 		$disallowed_roles = array( 'editor', 'administrator', 'author' );
 
 		return ! array_intersect( $disallowed_roles, $user->roles );
@@ -197,7 +226,7 @@ class UserHooks {
 	 *
 	 * @return object
 	 */
-	public static function getClass() {
+	public static function get_class() {
 		return get_class();
 	}
 }
